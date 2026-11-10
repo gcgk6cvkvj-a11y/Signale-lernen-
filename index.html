@@ -367,7 +367,7 @@ hr { border: 0; border-top: 1px solid var(--border); margin: 16px 0; }
     <input type="hidden" id="editId">
     
     <label for="shortName">Kurzbezeichnung</label>
-    <input id="shortName" placeholder="z. B. Ne 1">
+    <input id="shortName" placeholder="z. B. Lf 1">
     
     <label for="longName">Langbezeichnung</label>
     <input id="longName" placeholder="z. B. Trapeztafel">
@@ -375,20 +375,23 @@ hr { border: 0; border-top: 1px solid var(--border); margin: 16px 0; }
     <label for="meaning">Bedeutung / Musterlösung</label>
     <textarea id="meaning" placeholder="Vollständige Bedeutung..."></textarea>
     
-    <label for="category">Kategorie</label>
-    <select id="category">
-      <option value="Ne">Ne – Nebensignale</option>
-      <option value="Hp">Hp – Hauptsignale</option>
-      <option value="Vr">Vr – Vorsignale</option>
-      <option value="Ks">Ks – Kombinationssignale</option>
-      <option value="Hl">Hl – Hl-Signale</option>
-      <option value="Sh">Sh – Schutzsignale</option>
-      <option value="Ra">Ra – Rangiersignale</option>
-      <option value="Zs">Zs – Zusatzsignale</option>
-      <option value="El">El – Fahrleitungssignale</option>
-      <option value="So">So – Sonstige Signale</option>
-      <option value="Sonstige">Sonstige</option>
-    </select>
+    <!-- FREIES KATEGORIE-EINGABEFELD MIT VORSCHLÄGEN -->
+    <label for="category">Kategorie (Wähle aus der Liste oder tippe einen eigenen Namen ein)</label>
+    <input id="category" list="categoryList" placeholder="z. B. Lf, Ne, Hp oder eigene Kategorie..." autocomplete="off">
+    <datalist id="categoryList">
+      <option value="Lf">
+      <option value="Ne">
+      <option value="Hp">
+      <option value="Vr">
+      <option value="Ks">
+      <option value="Hl">
+      <option value="Sh">
+      <option value="Ra">
+      <option value="Zs">
+      <option value="El">
+      <option value="So">
+      <option value="Sonstige">
+    </datalist>
     
     <label for="imageUrl">Bild-URL (optional)</label>
     <input id="imageUrl" placeholder="https://...">
@@ -438,8 +441,8 @@ hr { border: 0; border-top: 1px solid var(--border); margin: 16px 0; }
 (function(){
 "use strict";
 
-const DB_KEY = "railway_signals_db_pro_v2";
-const OLD_KEYS = ["railway_signals_db_pro_v1", "railway_signals_db_v7", "railway_signal_db_v1"];
+const DB_KEY = "railway_signals_db_pro_v3";
+const OLD_KEYS = ["railway_signals_db_pro_v2", "railway_signals_db_pro_v1", "railway_signals_db_v7", "railway_signal_db_v1"];
 const STATS_KEY = "railway_signal_stats_v4";
 
 const $ = id => document.getElementById(id);
@@ -484,7 +487,6 @@ function pick(obj, keys) {
   return "";
 }
 
-/* Universeller Normalisierer für Datensätze jeglicher Struktur */
 function normalizeSignal(source) {
   const s = source || {};
   const nested = [s, s.signal, s.data, s.fields, s.information, s.details];
@@ -509,7 +511,7 @@ function normalizeSignal(source) {
 
   const meaningVal = find([
     "meaning", "meaningText", "signalMeaning", "bedeutung", "signalbedeutung",
-    "beschreibung", "description", "erlaeuterung", "answer", "text"
+    "beschreibung", "description", "erlaerung", "answer", "text"
   ]);
 
   const imageVal = find(["image", "imageUrl", "image_url", "bild", "bildUrl", "src"]);
@@ -603,7 +605,10 @@ function updateCategories() {
   const old = select.value || "all";
   select.innerHTML = '<option value="all">Alle Signale</option>';
 
-  const categories = [...new Set(signals.map(s => s.category || "Sonstige"))].sort();
+  const baseCats = ["Lf", "Ne", "Hp", "Vr", "Ks", "Hl", "Sh", "Ra", "Zs", "El", "So", "Sonstige"];
+  const allCatsSet = new Set([...baseCats, ...signals.map(s => s.category || "Sonstige")]);
+  const categories = [...allCatsSet].sort();
+
   categories.forEach(cat => {
     const opt = document.createElement("option");
     opt.value = cat;
@@ -612,6 +617,12 @@ function updateCategories() {
   });
 
   select.value = [...select.options].some(o => o.value === old) ? old : "all";
+
+  // Datalist im Formular für freie Eingaben aktualisieren
+  const datalist = $("categoryList");
+  if (datalist) {
+    datalist.innerHTML = categories.map(c => `<option value="">`).join("");
+  }
 }
 
 function filteredSignals() {
@@ -700,14 +711,14 @@ function solutionHTML(signal) {
   const long = String(signal.long || "").trim();
   const meaning = String(signal.meaning || "").trim();
 
-  const valueHTML = v => v ? `<span class="solution-value">${esc(v)}</span>` : `<span class="missing">FEHLT IN DATENBANK</span>`;
+  const valueHTML = v => v ? `<span class="solution-value"></span>` : `<span class="missing">FEHLT IN DATENBANK</span>`;
 
   return `
     <div class="solution">
       <h3>✓ Musterlösung</h3>
-      <p><b>Kurzbezeichnung:</b><br>${valueHTML(short)}</p>
-      <p><b>Langbezeichnung:</b><br>${valueHTML(long)}</p>
-      <p><b>Bedeutung:</b><br>${valueHTML(meaning)}</p>
+      <p><b>Kurzbezeichnung:</b><br></p>
+      <p><b>Langbezeichnung:</b><br></p>
+      <p><b>Bedeutung:</b><br></p>
     </div>`;
 }
 
@@ -716,11 +727,11 @@ function feedbackHTML(signal, result) {
   const allCorrect = points === 3;
   const line = (label, isOk) => `
     <p class="score-line">
-      <span>${label}</span>
-      <b class="${isOk ? "correct" : "incorrect"}">${isOk ? "✓ Richtig" : "✗ Falsch"}</b>
+      <span></span>
+      <b class=" "incorrect""> "✗ Falsch"</b>
     </p>`;
 
-  let html = `<h3 class="${allCorrect ? "correct" : "incorrect"}">${allCorrect ? "✓ Alles richtig!" : "✗ Nicht vollständig richtig"}</h3>`;
+  let html = `<h3 class=" "incorrect""> "✗ Nicht vollständig richtig"</h3>`;
   html += line("Kurzbezeichnung", result.short);
   html += line("Langbezeichnung", result.long);
   html += line("Bedeutung", result.meaning);
@@ -733,7 +744,7 @@ function feedbackHTML(signal, result) {
       </div>`;
   }
   if (!allCorrect) html += solutionHTML(signal);
-  html += `<hr><h3>Ergebnis: ${points} von 3 Punkten</h3>`;
+  html += `<hr><h3>Ergebnis:  von 3 Punkten</h3>`;
   return html;
 }
 
@@ -784,7 +795,7 @@ function skipLearn() {
   if (!learnDone) nextLearn();
 }
 
-/* VERWALTUNG & EVENT DELEGATION FIX */
+/* VERWALTUNG & FORMULAR */
 function clearForm() {
   $("editId").value = "";
   $("shortName").value = "";
@@ -804,6 +815,7 @@ function saveSignal() {
   const short = $("shortName").value.trim();
   const long = $("longName").value.trim();
   const meaning = $("meaning").value.trim();
+  const categoryInput = $("category").value.trim() || "Sonstige";
 
   if (!short || !long || !meaning) {
     notify("Bitte Kurzbezeichnung, Langbezeichnung und Bedeutung ausfüllen.");
@@ -814,7 +826,7 @@ function saveSignal() {
   const item = {
     id: existing ? existing.id : makeId(),
     short, long, meaning,
-    category: $("category").value || "Sonstige",
+    category: categoryInput,
     image: tempImageBase64 || $("imageUrl").value.trim() || (existing ? existing.image : ""),
     attempts: existing ? existing.attempts : 0,
     points: existing ? existing.points : 0,
@@ -866,17 +878,17 @@ function renderList() {
     const sigId = s.id || "";
 
     const titleText = (shortVal || longVal)
-      ? `${esc(shortVal)} ${shortVal && longVal ? '–' : ''} ${esc(longVal)}`.trim()
+      ? `  '' `.trim()
       : "Unbenanntes Signal";
 
     return `
       <div class="signal-card">
-        <h3>${titleText}</h3>
-        <small class="muted">Kategorie: <b>${esc(catVal)}</b></small>
-        <p>${esc(meanVal || "Keine Bedeutung hinterlegt")}</p>
+        <h3></h3>
+        <small class="muted">Kategorie: <b></b></small>
+        <p></p>
         <div class="actions">
-          <button type="button" class="btn-edit" data-id="${esc(sigId)}">✏️ Bearbeiten</button>
-          <button type="button" class="danger btn-delete" data-id="${esc(sigId)}">🗑 Löschen</button>
+          <button type="button" class="btn-edit" data-id="">✏️ Bearbeiten</button>
+          <button type="button" class="danger btn-delete" data-id="">🗑 Löschen</button>
         </div>
       </div>`;
   }).join("");
@@ -909,12 +921,6 @@ function editSignal(id) {
   $("meaning").value = signal.meaning || signal.bedeutung || "";
   
   const cat = signal.category || signal.kategorie || "Sonstige";
-  if (![...$("category").options].some(o => o.value === cat)) {
-    const opt = document.createElement("option");
-    opt.value = cat;
-    opt.textContent = cat;
-    $("category").appendChild(opt);
-  }
   $("category").value = cat;
   
   $("imageUrl").value = signal.image && !signal.image.startsWith("data:") ? signal.image : "";
@@ -934,7 +940,7 @@ function deleteSignal(id) {
   if (!signal) return;
 
   const title = signal.short ? signal.short : "dieses Signal";
-  if (!confirm(`Möchtest du ${title} wirklich löschen?`)) return;
+  if (!confirm(`Möchtest du  wirklich löschen?`)) return;
 
   signals = signals.filter(s => String(s.id) !== String(id));
   delete stats.bySignal[signal.id];
@@ -1024,11 +1030,11 @@ function finishExam() {
 
   $("examResult").innerHTML = `
     <h3>Prüfung abgeschlossen</h3>
-    <p style="font-size: 20px;"><b>${examPoints} von ${max} Punkten</b> (${pct} %)</p>
-    <p style="font-size: 18px; color: ${passed ? "var(--green)" : "var(--red)"};">
-      <b>${passed ? "✓ Bestanden – Ausgezeichnet!" : "✗ Nicht bestanden – Bitte weiter üben!"}</b>
+    <p style="font-size: 20px;"><b> von  Punkten</b> ( %)</p>
+    <p style="font-size: 18px; color:  "var(--red)";">
+      <b> "✗ Nicht bestanden – Bitte weiter üben!"</b>
     </p>
-    <p>Bearbeitungszeit: ${min} Min. ${remSec} Sek.</p>
+    <p>Bearbeitungszeit:  Min.  Sek.</p>
     <button type="button" class="primary" id="againExam" style="width:100%; margin-top:10px;">Neue Prüfung starten</button>
   `;
   $("againExam").addEventListener("click", startExam);
@@ -1057,8 +1063,8 @@ function renderStats() {
 
   $("difficultSignals").innerHTML = diff.map(s => `
     <div class="signal-card">
-      <b>${esc(s.short)} – ${esc(s.long)}</b><br>
-      <small>${s.points} Punkte in ${s.attempts} Versuchen (${s.wrong} Fehler)</small>
+      <b> – </b><br>
+      <small> Punkte in  Versuchen ( Fehler)</small>
     </div>`).join("") || "<p class='muted'>Noch keine Versuche ausgewertet.</p>";
 
   const groups = {};
@@ -1075,8 +1081,8 @@ function renderStats() {
     const pct = mx ? Math.round(g.points / mx * 100) : 0;
     return `
       <div class="signal-card">
-        <b>${esc(cat)}</b> · ${pct} %
-        <div class="progress"><span style="width:${pct}%"></span></div>
+        <b></b> ·  %
+        <div class="progress"><span style="width:%"></span></div>
       </div>`;
   }).join("") || "<p class='muted'>Keine Daten vorhanden.</p>";
 }
@@ -1148,7 +1154,6 @@ function initEvents() {
   $("clearForm").addEventListener("click", clearForm);
   $("searchSignals").addEventListener("input", renderList);
 
-  /* KRITISCH: Delegiertes Klick-Event für dynamische Liste */
   $("signalList").addEventListener("click", handleListClick);
 
   $("pickGallery").addEventListener("click", () => $("imageFile").click());
